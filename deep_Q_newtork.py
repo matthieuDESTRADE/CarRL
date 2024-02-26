@@ -11,7 +11,7 @@ import itertools
 
 class QNetwork(nn.Module):
     def __init__(self, action_dim):
-        super(QNetwork, self).__init__()
+        super().__init__()
 
         # Define the layers of the CNN
         self.conv1 = nn.Conv2d(
@@ -206,7 +206,7 @@ class DQNAgent():
                 # Get action, next_state and reward
 
                 if np.abs(rdm) >= self.delay:
-                    action, rdm = self.epsilon_greedy(state)
+                    action, rdm = epsilon_greedy(state)
                 elif rdm < 0:
                     rdm -= 1
                 elif rdm >= 1:
