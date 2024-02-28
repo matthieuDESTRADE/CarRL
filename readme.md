@@ -37,3 +37,5 @@ final hidden layer is fully-connected and consists of 256 rectifier units. The o
 https://www.nature.com/articles/s41586-021-04357-7#Sec5
 GT racing env => complex reward :
  course progress(Rcp), off-course penalty (Rsoc or Rloc), wall penalty (Rw), tyre-slip penalty (Rts), passing bonus (Rps), any-collision penalty (Rc), rear-end penalty (Rr) and unsporting-collision penalty (Ruc)
+
+genetic algorithm

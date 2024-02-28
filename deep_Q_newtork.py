@@ -3,10 +3,9 @@ from torch import nn
 import numpy as np
 import gymnasium as gym
 from environment import CarEnv
-import random
-import collections
 from tqdm.notebook import tqdm
 import itertools
+from torchrl.data import ReplayBuffer
 
 
 class QNetwork(nn.Module):
@@ -26,7 +25,7 @@ class QNetwork(nn.Module):
             in_channels=32, out_channels=64, kernel_size=3, stride=1, padding=1)
         self.relu3 = nn.LeakyReLU(0.1)
         self.pool3 = nn.MaxPool2d(kernel_size=2, stride=2)
-        self.fc1 = nn.Linear(64 * 6 * 6, 32)
+        self.fc1 = nn.Linear(64*5*5, 32)
         self.relu3 = nn.LeakyReLU(0.1)
         self.fc2 = nn.Linear(32, action_dim)
 
@@ -145,24 +144,6 @@ class MinimumExponentialLR(torch.optim.lr_scheduler.ExponentialLR):
         ]
 
 
-class ReplayBuffer:
-    def __init__(self, capacity: int):
-        self.buffer = collections.deque(maxlen=capacity)
-
-    def add(self, state: np.ndarray, action: np.int64, reward: float, next_state: np.ndarray, done: bool):
-        self.buffer.append((state, action, reward, next_state, done))
-
-    def sample(self, batch_size: int):
-        states, actions, rewards, next_states, dones = zip(
-            *random.sample(self.buffer, batch_size))
-        # @matt : this should do the trick :
-        np.random.choice(self.buffer, batch_size, replace=False)
-        return np.array(states), actions, rewards, np.array(next_states), dones
-
-    def __len__(self):
-        return len(self.buffer)
-
-
 class DQNAgent():
     def __init__(self,
                  env: gym.Env,
@@ -171,8 +152,7 @@ class DQNAgent():
                  target_q_network_sync_period: int,
                  device: torch.device,
                  gamma: float,
-                 delay,
-                 replay_buffer: ReplayBuffer = None,
+                 frame_skipping: int,
                  ):
         self.env = env
         self.q_network = q_network
@@ -180,10 +160,10 @@ class DQNAgent():
         self.target_q_network_sync_period = target_q_network_sync_period
         self.device = device
         self.gamma = gamma
-        self.delay = delay
-        if not replay_buffer:
-            replay_buffer = ReplayBuffer(2000)
-        self.replay_buffer = replay_buffer
+        self.frame_skipping = frame_skipping
+        self.replay_buffer = ReplayBuffer()
+        self.result_list = [[], [], []]
+        self.train_index = 0
 
     def train(self,
               num_episodes: int,
@@ -194,7 +174,7 @@ class DQNAgent():
               lr_scheduler: torch.optim.lr_scheduler,
               ):
         iteration = 0
-        episode_reward_list = []
+        self.train_index +=1
 
         for episode_index in tqdm(range(1, num_episodes)):
             state = self.env.reset()
@@ -205,7 +185,7 @@ class DQNAgent():
 
                 # Get action, next_state and reward
 
-                if np.abs(rdm) >= self.delay:
+                if np.abs(rdm) >= self.frame_skipping:
                     action, rdm = epsilon_greedy(state)
                 elif rdm < 0:
                     rdm -= 1
@@ -214,7 +194,7 @@ class DQNAgent():
 
                 next_state, reward, done, _ = self.env.step(action)
 
-                self.replay_buffer.add(state, action, reward, next_state, done)
+                self.replay_buffer.add((state, action, reward, next_state, done))
 
                 episode_reward += reward
                 # Update the q_network weights with a batch of experiences from the buffer
@@ -259,7 +239,9 @@ class DQNAgent():
 
                 state = next_state
 
-            episode_reward_list.append(episode_reward)
             epsilon_greedy.decay_epsilon()
-            print(episode_reward)
-        return episode_reward_list
+
+            self.result_list[0].append(episode_index)
+            self.result_list[1].append(episode_reward)
+            self.result_list[2].append(self.train_index)
+            print(f'Episode {episode_index} - Reward: {episode_reward}')

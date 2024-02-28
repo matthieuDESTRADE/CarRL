@@ -72,7 +72,7 @@ class CarEnv(gym.Env):
             (self.car_x-np.array(lnoise)[:, 0])**2+(self.car_y-np.array(lnoise)[:, 1])**2)])
 
         # Define the action and observation spaces
-        self.action_space = spaces.Discrete(4)
+        self.action_space = spaces.Discrete(4) # TODO: change to 6
         self.observation_space = spaces.Box(
             low=0, high=255, shape=(84, 84, 3), dtype=np.uint8)
 
