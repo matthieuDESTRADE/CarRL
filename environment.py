@@ -171,6 +171,9 @@ class CarEnv(gym.Env):
         return obs, rwrd, done, {}
 
     def _get_observation(self):
+        for event in pg.event.get():
+            if event.type == pg.QUIT:
+                pg.quit() 
         # Update game logic here
         # Draw to the screen here
         self.screen.fill((10, 150, 50))  # Clear the screen with white color
