@@ -53,6 +53,7 @@ class CarEnv(gym.Env):
         self.car_y = 650
         self.car_speed = .0005
         self.angle = np.pi
+        self.maxspeed = True
 
         # random angle for training
         if not self.evaluation:
@@ -110,10 +111,11 @@ class CarEnv(gym.Env):
         noise_dist = np.linalg.norm(pos - self.lnoise, axis=1)
         dist = np.min(noise_dist)
         if np.sqrt(dist) < 110:
-            self.speedval *= 0.9992**dt
+            if self.maxspeed:
+                self.speedval *= 0.9992**dt
         else:
             self.speedval *= 0.992**dt
-            # done = True
+
 
         intpt = np.argmin(noise_dist)
         curpoint = self.lnoise[intpt]
