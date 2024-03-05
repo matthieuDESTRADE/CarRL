@@ -9,15 +9,11 @@ class CarEnv(gym.Env):
 
     def fillnoise(self,t):
         # Generate Perlin noise
-        scale = 0.001
-        octaves = 3
-        persistence = 0.5
-        lacunarity = 0.1
         noise_map = [0] * (self.height // self.subs)
 
         for x in range(self.height // self.subs):
             nx = t + x * self.subs
-            noise_value = 0.8*noise.pnoise1(nx * scale, octaves=octaves, persistence=persistence, lacunarity=lacunarity) * min(5000,nx-self.tinit)/5000 +0.3
+            noise_value = 0.9*noise.pnoise1(nx * self.scale, octaves=self.octaves, persistence=self.persistence, lacunarity=self.lacunarity) * min(5000,nx-self.tinit)/5000 +0.3
             noise_map[x] = noise_value
         return noise_map
 
@@ -29,6 +25,11 @@ class CarEnv(gym.Env):
 
         self.time = 0
         self.score = 0
+
+        self.scale = 0.001
+        self.octaves = 3
+        self.persistence = 0.5
+        self.lacunarity = 0.1
 
         pg.init()
 
@@ -66,11 +67,11 @@ class CarEnv(gym.Env):
         self.noise_map = self.fillnoise(self.t)
         lnoise = [(300 + 500 * self.noise_map[self.height // self.subs - 1 - x], x * self.subs) for x in range(self.height // self.subs)]
 
-        self.lastpoint = list(lnoise[np.argmin((self.car_x-np.array(lnoise)[:,0])**2+(self.car_y-np.array(lnoise)[:,1])**2)])
+        self.lastt = self.car_y-self.t
 
 
         # Define the action and observation spaces
-        self.action_space = spaces.Discrete(4)
+        self.action_space = spaces.Discrete(6)
         self.observation_space = spaces.Box(low=0, high=255, shape=(84, 84, 3), dtype=np.uint8)
 
         if not(display_screen):
@@ -124,14 +125,21 @@ class CarEnv(gym.Env):
             lastpoint[1] -= self.t
             vec = np.array(lastpoint) - np.array(curpoint)  
 
+        rwrd = 0
+        self.curt = intpt* self.subs - self.t
+        while self.lastt != self.curt:
+            p1 = np.array([0.9*noise.pnoise1(self.lastt * self.scale, octaves=self.octaves, persistence=self.persistence, lacunarity=self.lacunarity) * min(5000,self.lastt-self.tinit)/5000 +0.3, self.lastt])
+            newt = self.lastt - min((self.lastt-self.curt),5)
+            p2 = np.array([0.9*noise.pnoise1(newt * self.scale, octaves=self.octaves, persistence=self.persistence, lacunarity=self.lacunarity) * min(5000,newt-self.tinit)/5000 +0.3, newt])
+            rwrd += np.sign(self.lastt-self.curt)*np.sqrt((p2[0]-p1[0])**2 + (p2[1]-p1[1])**2)/10
+            self.lastt = newt
 
-
-        norm = np.sqrt((lastpoint[0]-curpoint[0])**2 + (lastpoint[1]-curpoint[1])**2)**0.5
-        rwrd = 0.1/5*(vec[0]*(self.speedval * np.sin(self.angle) * dt) + vec[1]*(self.speedval * np.cos(self.angle) * dt))/norm
+        #norm = np.sqrt((lastpoint[0]-curpoint[0])**2 + (lastpoint[1]-curpoint[1])**2)**0.5
+        #rwrd = 0.1/5*(vec[0]*(self.speedval * np.sin(self.angle) * dt) + vec[1]*(self.speedval * np.cos(self.angle) * dt))/norm
         self.score += rwrd
         #rwrd += -(0.1/5)*(vec[0]*(self.speedval * np.cos(self.angle) * dt) - vec[1]*(self.speedval * np.sin(self.angle) * dt))*np.sign(vec[0]*(self.car_y-self.t-curpoint[1]) - vec[1]*(self.car_x-curpoint[0]))/norm
 
-        if np.sqrt(dist) > 120:
+        if np.sqrt(dist) > 120 and not(self.evaluation):
             done = True
         
 

@@ -24,11 +24,13 @@ subs = 20
 
 noise_map = [0] * (height // subs)
 t = np.random.rand() * 1000
+tinit = t
+
 
 def fillnoise(t):
     for x in range(height // subs):
         nx = t + x * subs
-        noise_value = noise.pnoise1(nx * scale, octaves=octaves, persistence=persistence, lacunarity=lacunarity) * min(1000,nx)/1000 +0.3
+        noise_value = noise.pnoise1(nx * scale, octaves=octaves, persistence=persistence, lacunarity=lacunarity) * min(1000,nx - tinit)/1000 +0.3
         noise_map[x] = noise_value
 
 
@@ -57,6 +59,7 @@ time = 0
 lastpoint = list(lnoise[np.argmin((car_x-np.array(lnoise)[:,0])**2+(car_y-np.array(lnoise)[:,1])**2)])
 
 Vjeu = 1
+lastt = car_y-t
 
 while running:
     clock.tick(30)
@@ -108,9 +111,18 @@ while running:
 
 
 
-    norm = np.sqrt((lastpoint[0]-curpoint[0])**2 + (lastpoint[1]-curpoint[1])**2)**0.5
-    rwrd = 0.1/5*(vec[0]*(speedval * np.sin(angle) * dt) + vec[1]*(speedval * np.cos(angle) * dt))/norm
-    rwrd += -0.2*(0.1/5)*(vec[0]*(speedval * np.cos(angle) * dt) - vec[1]*(speedval * np.sin(angle) * dt))*np.sign(vec[0]*(car_y-t-curpoint[1]) - vec[1]*(car_x-curpoint[0]))/norm
+    rwrd = 0
+    curt = intpt* subs - t
+    while lastt != curt:
+        p1 = np.array([0.9*noise.pnoise1(lastt * scale, octaves=octaves, persistence=persistence, lacunarity=lacunarity) * min(5000,lastt-tinit)/5000 +0.3, lastt])
+        newt = lastt - min((lastt-curt),5)
+        p2 = np.array([0.9*noise.pnoise1(newt * scale, octaves=octaves, persistence=persistence, lacunarity=lacunarity) * min(5000,newt-tinit)/5000 +0.3, newt])
+        rwrd += np.sign(lastt-curt)*np.sqrt((p2[0]-p1[0])**2 + (p2[1]-p1[1])**2)/10
+        lastt = newt
+
+    #norm = np.sqrt((lastpoint[0]-curpoint[0])**2 + (lastpoint[1]-curpoint[1])**2)**0.5
+    #rwrd = 0.1/5*(vec[0]*(speedval * np.sin(angle) * dt) + vec[1]*(speedval * np.cos(angle) * dt))/norm
+    #rwrd += -0.2*(0.1/5)*(vec[0]*(speedval * np.cos(angle) * dt) - vec[1]*(speedval * np.sin(angle) * dt))*np.sign(vec[0]*(car_y-t-curpoint[1]) - vec[1]*(car_x-curpoint[0]))/norm
 
     score += rwrd
 
@@ -131,7 +143,7 @@ while running:
 
 
     # Create a text surface
-    text_surface = font_style.render("score : " + str(rwrd)+" m", True, (255, 255, 255))
+    text_surface = font_style.render("score : " + str(int(score))+" m", True, (255, 255, 255))
     text_surface2 = font_style.render("time : " + str(time/1000)+" s", True, (255, 255, 255))
     ms = (score/5) / (time/1000) if time>0 else 0
     text_surface3 = font_style.render("mean speed : " + str(int(100*ms)/100)+" m/s", True, (255, 255, 255))
