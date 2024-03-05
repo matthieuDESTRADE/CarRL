@@ -1,85 +1,90 @@
+import sys
 import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
 import pygame as pg
 import noise
 import cv2
+import torch
+
 
 class CarEnv(gym.Env):
-
-    def fillnoise(self,t):
+    def fillnoise(self, t):
         # Generate Perlin noise
-        noise_map = [0] * (self.height // self.subs)
+        scale = 0.001
+        octaves = 3
+        persistence = 0.5
+        lacunarity = 0.1
+        noise_map = [0] * (self.display_height // self.subs)
 
-        for x in range(self.height // self.subs):
+        for x in range(self.display_height // self.subs):
             nx = t + x * self.subs
-            noise_value = 0.9*noise.pnoise1(nx * self.scale, octaves=self.octaves, persistence=self.persistence, lacunarity=self.lacunarity) * min(5000,nx-self.tinit)/5000 +0.3
+            noise_value = 0.8*noise.pnoise1(nx * scale, octaves=octaves, persistence=persistence,
+                                            lacunarity=lacunarity) * min(5000, nx-self.tinit)/5000 + 0.3
             noise_map[x] = noise_value
-        return noise_map
 
-    def __init__(self, maxtime=60, display_screen=True, evaluation = False):
-        super(CarEnv, self).__init__()
+        self.lnoise = np.array([(300 + 500 * noise_map[self.display_height // self.subs - 1 - x],
+                                 x * self.subs) for x in range(self.display_height // self.subs)])
 
-        self.display_screen = display_screen
+    def __init__(self, maxtime=60, display=True, evaluation=False, draw_central_line=False):
+        super().__init__()
+
+        self.draw_central_line = draw_central_line
+        self.evaluation = evaluation
+        self.display = display
         self.maxtime = maxtime
 
         self.time = 0
         self.score = 0
 
-        self.scale = 0.001
-        self.octaves = 3
-        self.persistence = 0.5
-        self.lacunarity = 0.1
+        self.display_width, self.display_height = 1000, 1000
+        size = (self.display_width, self.display_height)
 
-        pg.init()
+        self.observation_size = (40, 40, 3)
 
-        self.screen = pg.Surface((1000,1000))
-        self.font_style = pg.font.SysFont(None, 36)
+        self.action_space = spaces.Discrete(6)
+        self.observation_space = spaces.Box(
+            low=0, high=255, shape=self.observation_size, dtype=np.uint8)
 
-        if display_screen:
-            self.dsplay = pg.display.set_mode((1000, 1000))
-            pg.display.set_caption("My Pygame Window")
-        else:
-            pg.display.set_mode((1,1), 0, 32)
-        
-
-        self.carimg = pg.image.load('car.png').convert_alpha()
-        self.carimg = pg.transform.scale(self.carimg, (120, 120))
-
-        self.width, self.height = 1000, 1050
         self.subs = 20
 
         # Car position and speed
         self.car_x = 500
         self.car_y = 650
-        self.car_speed = 20
-        self.evaluation = evaluation
-        if evaluation:
-            self.angle = np.pi
-        else:
-            self.angle = np.pi + np.random.rand()*2*np.pi*0.1
+        self.car_speed = .0005
+        self.angle = np.pi
+        self.maxspeed = True
+
+        # random angle for training
+        if not self.evaluation:
+            self.angle += np.random.rand()*2*np.pi*0.1
 
         self.speedval = 0
         self.tv = 0.005
 
+        # noise
         self.t = np.random.rand()*10000000
         self.tinit = self.t
-        self.noise_map = self.fillnoise(self.t)
-        lnoise = [(300 + 500 * self.noise_map[self.height // self.subs - 1 - x], x * self.subs) for x in range(self.height // self.subs)]
+        self.fillnoise(self.t)
 
-        self.lastt = self.car_y-self.t
+        if not self.display:
+            size = (1, 1)
 
-
-        # Define the action and observation spaces
-        self.action_space = spaces.Discrete(6)
-        self.observation_space = spaces.Box(low=0, high=255, shape=(84, 84, 3), dtype=np.uint8)
-
-        if not(display_screen):
-            pg.quit()
+        pg.init()
+        self.display_screen = pg.display.set_mode(size)
+        self.screen = pg.Surface(size)
+        carimg = pg.image.load('car.png').convert_alpha()
+        self.carimg = pg.transform.scale(carimg, (120, 120))
+        self.font_style = pg.font.SysFont(None, 36)
+        pg.display.set_caption("My Pygame Window")
 
     def reset(self):
         # Reset the environment and return the initial observation (frame)
-        self.__init__(self.maxtime, self.display_screen,self.evaluation)  # Reinitialize the environment
+        self.__init__(self.maxtime,
+                      self.display,
+                      self.evaluation,
+                      self.draw_central_line
+                      )
         observation = self._get_observation()
         return observation
 
@@ -91,61 +96,49 @@ class CarEnv(gym.Env):
         rwrd = 0
 
         if action == 0 or action == 2 or action == 3:
-            self.speedval += .0005 * dt
+            self.speedval += self.car_speed * dt
         if action == 1 or action == 4 or action == 5:
-            self.speedval -= .0005 * dt
+            self.speedval -= self.car_speed * dt
         if action == 2 or action == 4:
-            self.angle += self.tv * dt * min(self.speedval,2)/2
+            self.angle += self.tv * dt * min(self.speedval, 2)/2
         if action == 3 or action == 5:
-            self.angle -= self.tv*dt* min(self.speedval,2)/2
+            self.angle -= self.tv*dt * min(self.speedval, 2)/2
 
         self.car_x = self.car_x + self.speedval * np.sin(self.angle) * dt
         self.car_y = self.car_y + self.speedval * np.cos(self.angle) * dt
 
-        self.noise_map = self.fillnoise(self.t)
-        lnoise = [(300 + 500 * self.noise_map[self.height // self.subs - 1 - x], x * self.subs) for x in range(self.height // self.subs)]
-        dist = np.min((self.car_x-np.array(lnoise)[:,0])**2+(self.car_y-np.array(lnoise)[:,1])**2)
+        pos = np.array([self.car_x, self.car_y])
+        noise_dist = np.linalg.norm(pos - self.lnoise, axis=1)
+        dist = np.min(noise_dist)
         if np.sqrt(dist) < 110:
-            self.speedval *= 0.9992**dt
+            if self.maxspeed:
+                self.speedval *= 0.9992**dt
         else:
             self.speedval *= 0.992**dt
-            #done = True
-            
 
-        intpt = np.argmin((self.car_x-np.array(lnoise)[:,0])**2+(self.car_y-np.array(lnoise)[:,1])**2)
-        curpoint = list(lnoise[intpt])
+
+        intpt = np.argmin(noise_dist)
+        curpoint = self.lnoise[intpt]
         curpoint[1] -= self.t
-        if list(lnoise[(intpt+1)%len(lnoise)])[1] <= self.car_y + self.t and curpoint[1] >= self.car_y:
-            lastpoint = list(lnoise[(intpt+1)%len(lnoise)])
+        if self.lnoise[(intpt+1) % len(self.lnoise)][1] <= self.car_y + self.t and curpoint[1] >= self.car_y:
+            lastpoint = self.lnoise[(intpt+1) % len(self.lnoise)]
             lastpoint[1] -= self.t
             vec = np.array(curpoint) - np.array(lastpoint)
 
         else:
-            lastpoint = list(lnoise[(intpt-1)])
+            lastpoint = self.lnoise[(intpt-1)]
             lastpoint[1] -= self.t
-            vec = np.array(lastpoint) - np.array(curpoint)  
+            vec = lastpoint - curpoint
 
-        rwrd = 0
-        self.curt = intpt* self.subs - self.t
-        while self.lastt != self.curt:
-            p1 = np.array([0.9*noise.pnoise1(self.lastt * self.scale, octaves=self.octaves, persistence=self.persistence, lacunarity=self.lacunarity) * min(5000,self.lastt-self.tinit)/5000 +0.3, self.lastt])
-            newt = self.lastt - min((self.lastt-self.curt),5)
-            p2 = np.array([0.9*noise.pnoise1(newt * self.scale, octaves=self.octaves, persistence=self.persistence, lacunarity=self.lacunarity) * min(5000,newt-self.tinit)/5000 +0.3, newt])
-            rwrd += np.sign(self.lastt-self.curt)*np.sqrt((p2[0]-p1[0])**2 + (p2[1]-p1[1])**2)/10
-            self.lastt = newt
+        norm = np.linalg.norm(vec)
 
-        #norm = np.sqrt((lastpoint[0]-curpoint[0])**2 + (lastpoint[1]-curpoint[1])**2)**0.5
-        #rwrd = 0.1/5*(vec[0]*(self.speedval * np.sin(self.angle) * dt) + vec[1]*(self.speedval * np.cos(self.angle) * dt))/norm
+        rwrd = 0.1/5*(vec[0]*(self.speedval * np.sin(self.angle) * dt) +
+                      vec[1]*(self.speedval * np.cos(self.angle) * dt))/norm
         self.score += rwrd
-        #rwrd += -(0.1/5)*(vec[0]*(self.speedval * np.cos(self.angle) * dt) - vec[1]*(self.speedval * np.sin(self.angle) * dt))*np.sign(vec[0]*(self.car_y-self.t-curpoint[1]) - vec[1]*(self.car_x-curpoint[0]))/norm
+        # rwrd += -(0.1/5)*(vec[0]*(self.speedval * np.cos(self.angle) * dt) - vec[1]*(self.speedval * np.sin(self.angle) * dt))*np.sign(vec[0]*(self.car_y-self.t-curpoint[1]) - vec[1]*(self.car_x-curpoint[0]))/norm
 
         if np.sqrt(dist) > 120 and not(self.evaluation):
             done = True
-        
-
-
-        # Update game logic here
-        # Draw to the screen here
 
         # Move the road
         lim = 600
@@ -164,66 +157,72 @@ class CarEnv(gym.Env):
         self.fillnoise(self.t)
 
         obs = self._get_observation()
-
-
         if self.time/1000 > self.maxtime:
             done = True
 
         if done:
             pg.quit()
 
+        if obs is None:
+            # user closed the window
+            done = True
+
         return obs, rwrd, done, {}
 
-
     def _get_observation(self):
-        # Update game logic here
-        # Draw to the screen here
-        self.screen.fill((10, 150, 50))  # Clear the screen with white color
+        for event in pg.event.get():
+            if event.type == pg.QUIT:
+                pg.quit()
+                return None
 
-        # pg.draw.lines(screen, (100, 100, 100), False, [(300 + 500 * noise_map[height//subs-1-x],x*subs) for x in range(height//subs)], 200)
-        for x in range(self.height // self.subs):
-            pg.draw.circle(self.screen, (100, 100, 100), (300 + 500 * self.noise_map[self.height // self.subs - 1 - x], x * self.subs), 100)
+        # Clear the screen with white color
+        self.screen.fill((10, 150, 50))
 
-        lnoise = [(300 + 500 * self.noise_map[self.height // self.subs - 1 - x], x * self.subs) for x in range(self.height // self.subs)]
-        #pg.draw.lines(self.screen, (255, 255, 0), False,lnoise, 5)
+        for x in range(self.display_height // self.subs):
+            pg.draw.circle(self.screen, (100, 100, 100), self.lnoise[x], 100)
+
+        if self.draw_central_line:
+            pg.draw.lines(self.screen, (200, 200, 200), False, self.lnoise, 5)
 
         # Draw the car
-        rotated_car = pg.transform.rotate(self.carimg, (self.angle+np.pi)/np.pi*180)
-        self.screen.blit(rotated_car, rotated_car.get_rect(center=self.carimg.get_rect(topleft=(self.car_x-self.carimg.get_size()[0]/2, self.car_y-self.carimg.get_size()[1]/2)).center).topleft)
+        rotated_car = pg.transform.rotate(
+            self.carimg, (self.angle+np.pi)/np.pi*180)
+        self.screen.blit(rotated_car, rotated_car.get_rect(center=self.carimg.get_rect(topleft=(
+            self.car_x-self.carimg.get_size()[0]/2, self.car_y-self.carimg.get_size()[1]/2)).center).topleft)
 
+        if self.display:
+            self.display_screen.blit(self.screen, (0, 0))
 
-        if self.display_screen:
-            # Create a text surface
-            
-            self.dsplay.blit(self.screen, (0, 0))
+            mean_speed = (self.score/5) / (self.time /
+                                           1000) if self.time > 0 else 0
 
+            score_surface = self.font_style.render(
+                "score : " + str(int(self.score))+" m", True, (255, 255, 255))
+            time_surface = self.font_style.render(
+                "time : " + str(self.time/1000)+" s", True, (255, 255, 255))
+            speed_surface = self.font_style.render(
+                "mean speed : " + str(round(mean_speed, 2))+" m/s", True, (255, 255, 255))
 
+            self.display_screen.blit(score_surface, (10, 10))
+            self.display_screen.blit(time_surface, (10, 50))
+            self.display_screen.blit(speed_surface, (10, 90))
 
-            text_surface = self.font_style.render("score : " + str(int(self.score))+" m", True, (255, 255, 255))
-            text_surface2 = self.font_style.render("time : " + str(self.time/1000)+" s", True, (255, 255, 255))
-            self.ms = (self.score/5) / (self.time/1000) if self.time>0 else 0
-            text_surface3 = self.font_style.render("mean speed : " + str(int(100*self.ms)/100)+" m/s", True, (255, 255, 255))
-
-            self.dsplay.blit(text_surface, (10,10))
-            self.dsplay.blit(text_surface2, (10,50))
-            self.dsplay.blit(text_surface3, (10,90))
-
-            
             pg.display.flip()
 
         # Capture the current frame
-        
-
-        #rotated_screen_data = pg.transform.rotate(self.screen, np.random.rand()*360)
-
         image = pg.surfarray.array3d(self.screen)
-        resized_image = cv2.resize(image, (40, 40), interpolation=cv2.INTER_AREA)
-        #cropped_image = resized_image[15:65, 15:65]
-
-         # Rotate the screen data (example rotation by 45 degrees)
-        #rotated_screen_data = pg.transform.rotate(self.screen, -self.angle/np.pi*180)
-        # Rotate the car coordinates
-        #rotated_car_x = self.car_x * np.cos(self.angle) - self.car_y * np.sin(self.angle)
-        #rotated_car_y = self.car_x * np.sin(self.angle) + self.car_y * np.cos(self.angle)
+        resized_image = cv2.resize(
+            image, self.observation_size[:2], interpolation=cv2.INTER_AREA)
+        # cropped_image = resized_image[15:65, 15:65]
 
         return resized_image
+
+    @staticmethod
+    def obs2tensor(obs, device=None):
+        if not device:
+            device = torch.device(
+                'cuda' if torch.cuda.is_available() else 'cpu')
+        if not (isinstance(obs[0, 0, 0], np.uint8)):
+            return torch.tensor(obs, dtype=torch.float32).permute(0, 3, 1, 2).to(device)
+        else:
+            return torch.tensor(obs, dtype=torch.float32).unsqueeze(0).permute(0, 3, 1, 2).to(device)
