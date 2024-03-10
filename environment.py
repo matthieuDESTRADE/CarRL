@@ -68,6 +68,8 @@ class CarEnv(gym.Env):
         self.tinit = self.t
         self.fillnoise(self.t)
 
+        if not self.display:
+            size = (1, 1)
         pg.init()
         self.display_screen = pg.display.set_mode(size)
         self.screen = pg.Surface(size)
