@@ -1,4 +1,4 @@
-"""Since the input space is large we will use CNN"""
+"""Since the input space (~40*40*3*256) is large we will use CNN"""
 from torch import nn
 
 

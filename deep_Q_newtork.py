@@ -27,12 +27,10 @@ class EpsilonGreedy:
         state = CarEnv.obs2tensor(state)
         if np.random.rand() > self.epsilon:
             action = self.q_network(state).argmax(dim=1).item()
-            rdm = -1
         else:
             action = self.env.action_space.sample()
-            rdm = 1
 
-        return action, rdm
+        return action
 
     def decay_epsilon(self):
         """
@@ -92,18 +90,11 @@ class DQNAgent():
         for episode_index in tqdm(range(1, num_episodes)):
             state = self.env.reset()
             episode_reward = 0
-            rdm = 10
 
             for t in itertools.count():
-
                 # Get action, next_state and reward
-
-                if np.abs(rdm) >= self.frame_skipping:
-                    action, rdm = epsilon_greedy(state)
-                elif rdm < 0:
-                    rdm -= 1
-                elif rdm >= 1:
-                    rdm += 1
+                if t % self.frame_skipping == 0:
+                    action = epsilon_greedy(state)
 
                 next_state, reward, done, _ = self.env.step(action)
 

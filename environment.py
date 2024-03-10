@@ -110,7 +110,7 @@ class CarEnv(gym.Env):
         pos = np.array([self.car_x, self.car_y])
         noise_dist = np.linalg.norm(pos - self.lnoise, axis=1)
         dist = np.min(noise_dist)
-        if np.sqrt(dist) < 110:
+        if dist < 110:
             if self.maxspeed:
                 self.speedval *= 0.9992**dt
         else:
@@ -137,7 +137,7 @@ class CarEnv(gym.Env):
         self.score += rwrd
         # rwrd += -(0.1/5)*(vec[0]*(self.speedval * np.cos(self.angle) * dt) - vec[1]*(self.speedval * np.sin(self.angle) * dt))*np.sign(vec[0]*(self.car_y-self.t-curpoint[1]) - vec[1]*(self.car_x-curpoint[0]))/norm
 
-        if np.sqrt(dist) > 120:
+        if dist > 120:
             done = True
 
         # Move the road
