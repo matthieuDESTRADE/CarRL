@@ -9,30 +9,33 @@ import torch
 
 
 class CarEnv(gym.Env):
+
     def fillnoise(self, t):
         # Generate Perlin noise
-        scale = 0.001
-        octaves = 3
-        persistence = 0.5
-        lacunarity = 0.1
         noise_map = [0] * (self.display_height // self.subs)
 
         for x in range(self.display_height // self.subs):
             nx = t + x * self.subs
-            noise_value = 0.8*noise.pnoise1(nx * scale, octaves=octaves, persistence=persistence,
-                                            lacunarity=lacunarity) * min(5000, nx-self.tinit)/5000 + 0.3
+            noise_value = 0.8*noise.pnoise1(nx * self.scale, octaves=self.octaves, persistence=self.persistence,
+                                            lacunarity=self.lacunarity) * min(5000, nx-self.tinit)/5000 + 0.3
             noise_map[x] = noise_value
 
         self.lnoise = np.array([(300 + 500 * noise_map[self.display_height // self.subs - 1 - x],
                                  x * self.subs) for x in range(self.display_height // self.subs)])
 
-    def __init__(self, maxtime=60, display=True, evaluation=False, draw_central_line=False):
+    def __init__(self, maxtime=60, display=True, evaluation=False, draw_central_line=False, scale=0.001, octaves=3, persistence=0.5, lacunarity=0.1):
         super().__init__()
 
         self.draw_central_line = draw_central_line
         self.evaluation = evaluation
         self.display = display
         self.maxtime = maxtime
+
+        # Perlin noise parameters
+        self.scale = scale
+        self.octaves = octaves
+        self.persistence = persistence
+        self.lacunarity = lacunarity
 
         self.time = 0
         self.score = 0
@@ -69,7 +72,6 @@ class CarEnv(gym.Env):
 
         if not self.display:
             size = (1, 1)
-
         pg.init()
         self.display_screen = pg.display.set_mode(size)
         self.screen = pg.Surface(size)
@@ -77,6 +79,8 @@ class CarEnv(gym.Env):
         self.carimg = pg.transform.scale(carimg, (120, 120))
         self.font_style = pg.font.SysFont(None, 36)
         pg.display.set_caption("My Pygame Window")
+        if not (self.display):
+            pg.quit()
 
     def reset(self):
         # Reset the environment and return the initial observation (frame)
@@ -110,12 +114,11 @@ class CarEnv(gym.Env):
         pos = np.array([self.car_x, self.car_y])
         noise_dist = np.linalg.norm(pos - self.lnoise, axis=1)
         dist = np.min(noise_dist)
-        if np.sqrt(dist) < 110:
+        if dist < 110:
             if self.maxspeed:
                 self.speedval *= 0.9992**dt
         else:
             self.speedval *= 0.992**dt
-
 
         intpt = np.argmin(noise_dist)
         curpoint = self.lnoise[intpt]
@@ -137,7 +140,7 @@ class CarEnv(gym.Env):
         self.score += rwrd
         # rwrd += -(0.1/5)*(vec[0]*(self.speedval * np.cos(self.angle) * dt) - vec[1]*(self.speedval * np.sin(self.angle) * dt))*np.sign(vec[0]*(self.car_y-self.t-curpoint[1]) - vec[1]*(self.car_x-curpoint[0]))/norm
 
-        if np.sqrt(dist) > 120 and not(self.evaluation):
+        if dist > 120:
             done = True
 
         # Move the road
@@ -170,10 +173,11 @@ class CarEnv(gym.Env):
         return obs, rwrd, done, {}
 
     def _get_observation(self):
-        for event in pg.event.get():
-            if event.type == pg.QUIT:
-                pg.quit()
-                return None
+        if self.display:
+            for event in pg.event.get():
+                if event.type == pg.QUIT:
+                    pg.quit()
+                    return None
 
         # Clear the screen with white color
         self.screen.fill((10, 150, 50))
@@ -226,3 +230,15 @@ class CarEnv(gym.Env):
             return torch.tensor(obs, dtype=torch.float32).permute(0, 3, 1, 2).to(device)
         else:
             return torch.tensor(obs, dtype=torch.float32).unsqueeze(0).permute(0, 3, 1, 2).to(device)
+
+
+class TorchLikeCarEnv(CarEnv):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def step(self, action, dt=1000/30):
+        obs, rwrd, done, info = super().step(action, dt)
+        return self.obs2tensor(obs), rwrd, done, info
+
+    def reset(self):
+        return self.obs2tensor(super().reset())
