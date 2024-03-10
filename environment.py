@@ -12,28 +12,30 @@ class CarEnv(gym.Env):
 
     def fillnoise(self, t):
         # Generate Perlin noise
-        scale = 0.001
-        octaves = 3
-        persistence = 0.5
-        lacunarity = 0.1
         noise_map = [0] * (self.display_height // self.subs)
 
         for x in range(self.display_height // self.subs):
             nx = t + x * self.subs
-            noise_value = 0.8*noise.pnoise1(nx * scale, octaves=octaves, persistence=persistence,
-                                            lacunarity=lacunarity) * min(5000, nx-self.tinit)/5000 + 0.3
+            noise_value = 0.8*noise.pnoise1(nx * self.scale, octaves=self.octaves, persistence=self.persistence,
+                                            lacunarity=self.lacunarity) * min(5000, nx-self.tinit)/5000 + 0.3
             noise_map[x] = noise_value
 
         self.lnoise = np.array([(300 + 500 * noise_map[self.display_height // self.subs - 1 - x],
                                  x * self.subs) for x in range(self.display_height // self.subs)])
 
-    def __init__(self, maxtime=60, display=True, evaluation=False, draw_central_line=False):
+    def __init__(self, maxtime=60, display=True, evaluation=False, draw_central_line=False, scale=0.001, octaves=3, persistence=0.5, lacunarity=0.1):
         super().__init__()
 
         self.draw_central_line = draw_central_line
         self.evaluation = evaluation
         self.display = display
         self.maxtime = maxtime
+
+        # Perlin noise parameters
+        self.scale = scale
+        self.octaves = octaves
+        self.persistence = persistence
+        self.lacunarity = lacunarity
 
         self.time = 0
         self.score = 0

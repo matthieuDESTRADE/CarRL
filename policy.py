@@ -55,6 +55,37 @@ class QNetwork(nn.Module):
         return x
 
 
+class SimpleQNetwork(nn.Module):
+    """ A simple Q-network that takes in a 3x40x40 input and returns a 6x1 output. """
+
+    def __init__(self, action_dim):
+        super().__init__()
+        self.conv1 = nn.Conv2d(
+            in_channels=3, out_channels=8, kernel_size=3, stride=1, padding=1)
+        self.relu1 = nn.LeakyReLU(0.1)
+        self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2)
+        self.conv2 = nn.Conv2d(
+            in_channels=8, out_channels=16, kernel_size=3, stride=1, padding=1)
+        self.relu2 = nn.LeakyReLU(0.1)
+        self.pool2 = nn.MaxPool2d(kernel_size=2, stride=2)
+        self.conv3 = nn.Conv2d(
+            in_channels=16, out_channels=32, kernel_size=3, stride=1, padding=1)
+        self.relu3 = nn.LeakyReLU(0.1)
+        self.pool3 = nn.MaxPool2d(kernel_size=2, stride=2)
+        self.fc1 = nn.Linear(32*5*5, 6)
+
+        self.model = nn.Sequential(
+            self.conv1, self.relu1, self.pool1,
+            self.conv2, self.relu2, self.pool2,
+            self.conv3, self.relu3, self.pool3,
+            nn.Flatten(),
+            self.fc1,
+        )
+
+    def forward(self, x):
+        return self.model(x)
+
+
 class OtherQNetwork(nn.Module):
     """
     Expects a 3x40x40 input and returns a 6x1 output.
