@@ -1,5 +1,19 @@
 """Since the input space (~40*40*3*256) is large we will use CNN"""
 from torch import nn
+import torch
+
+
+def recover_flattened(flat_params: torch.Tensor, model: torch.nn):
+    """
+    https://discuss.pytorch.org/t/how-to-flatten-and-then-unflatten-all-model-parameters/34730/2
+    :param flat_params: [#params, 1]
+    :param model: the model that gives the params with correct shapes
+    """
+    i = 0
+    for param in model.parameters():
+        n = param.numel()
+        param.data = flat_params[i:i+n].view(param.shape)
+        i += n
 
 
 class QNetwork(nn.Module):
