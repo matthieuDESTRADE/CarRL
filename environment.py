@@ -9,6 +9,7 @@ import torch
 
 
 class CarEnv(gym.Env):
+
     def fillnoise(self, t):
         # Generate Perlin noise
         scale = 0.001
@@ -67,9 +68,6 @@ class CarEnv(gym.Env):
         self.tinit = self.t
         self.fillnoise(self.t)
 
-        if not self.display:
-            size = (1, 1)
-
         pg.init()
         self.display_screen = pg.display.set_mode(size)
         self.screen = pg.Surface(size)
@@ -77,6 +75,8 @@ class CarEnv(gym.Env):
         self.carimg = pg.transform.scale(carimg, (120, 120))
         self.font_style = pg.font.SysFont(None, 36)
         pg.display.set_caption("My Pygame Window")
+        if not (self.display):
+            pg.quit()
 
     def reset(self):
         # Reset the environment and return the initial observation (frame)
@@ -115,7 +115,6 @@ class CarEnv(gym.Env):
                 self.speedval *= 0.9992**dt
         else:
             self.speedval *= 0.992**dt
-
 
         intpt = np.argmin(noise_dist)
         curpoint = self.lnoise[intpt]
@@ -170,10 +169,11 @@ class CarEnv(gym.Env):
         return obs, rwrd, done, {}
 
     def _get_observation(self):
-        for event in pg.event.get():
-            if event.type == pg.QUIT:
-                pg.quit()
-                return None
+        if self.display:
+            for event in pg.event.get():
+                if event.type == pg.QUIT:
+                    pg.quit()
+                    return None
 
         # Clear the screen with white color
         self.screen.fill((10, 150, 50))
@@ -226,3 +226,15 @@ class CarEnv(gym.Env):
             return torch.tensor(obs, dtype=torch.float32).permute(0, 3, 1, 2).to(device)
         else:
             return torch.tensor(obs, dtype=torch.float32).unsqueeze(0).permute(0, 3, 1, 2).to(device)
+
+
+class TorchLikeCarEnv(CarEnv):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def step(self, action, dt=1000/30):
+        obs, rwrd, done, info = super().step(action, dt)
+        return self.obs2tensor(obs), rwrd, done, info
+
+    def reset(self):
+        return self.obs2tensor(super().reset())
