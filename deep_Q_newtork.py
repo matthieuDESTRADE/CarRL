@@ -86,7 +86,6 @@ class DQNAgent():
         iteration = 0
         self.train_index += 1
 
-
         for episode_index in tqdm(range(1, num_episodes)):
             state = self.env.reset()
             episode_reward = 0
