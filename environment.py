@@ -23,10 +23,9 @@ class CarEnv(gym.Env):
         self.lnoise = np.array([(300 + 500 * noise_map[self.display_height // self.subs - 1 - x],
                                  x * self.subs) for x in range(self.display_height // self.subs)])
 
-    def __init__(self, maxtime=60, display=True, evaluation=False, draw_central_line=False, scale=0.001, octaves=3, persistence=0.5, lacunarity=0.1):
+    def __init__(self, maxtime=60, display=True, evaluation=False, scale=0.001, octaves=3, persistence=0.5, lacunarity=0.1):
         super().__init__()
 
-        self.draw_central_line = draw_central_line
         self.evaluation = evaluation
         self.display = display
         self.maxtime = maxtime
@@ -84,8 +83,7 @@ class CarEnv(gym.Env):
         # Reset the environment and return the initial observation (frame)
         self.__init__(self.maxtime,
                       self.display,
-                      self.evaluation,
-                      self.draw_central_line
+                      self.evaluation
                       )
         observation = self._get_observation()
         return observation
@@ -182,8 +180,6 @@ class CarEnv(gym.Env):
         for x in range(self.display_height // self.subs):
             pg.draw.circle(self.screen, (100, 100, 100), self.lnoise[x], 100)
 
-        if self.draw_central_line:
-            pg.draw.lines(self.screen, (200, 200, 200), False, self.lnoise, 5)
 
         # Draw the car
         rotated_car = pg.transform.rotate(
@@ -193,6 +189,8 @@ class CarEnv(gym.Env):
 
         if self.display:
             self.display_screen.blit(self.screen, (0, 0))
+            pg.draw.lines(self.display_screen, (200, 200, 200), False, self.lnoise, 5)
+
 
             mean_speed = (self.score/5) / (self.time /
                                            1000) if self.time > 0 else 0
