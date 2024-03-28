@@ -180,18 +180,20 @@ class CarEnv(gym.Env):
         for x in range(self.display_height // self.subs):
             pg.draw.circle(self.screen, (100, 100, 100), self.lnoise[x], 100)
 
+        if self.display:
+            self.display_screen.blit(self.screen, (0, 0))
+            pg.draw.lines(self.display_screen, (200, 200, 200), False, self.lnoise, 5)
+
 
         # Draw the car
         rotated_car = pg.transform.rotate(
             self.carimg, (self.angle+np.pi)/np.pi*180)
         self.screen.blit(rotated_car, rotated_car.get_rect(center=self.carimg.get_rect(topleft=(
             self.car_x-self.carimg.get_size()[0]/2, self.car_y-self.carimg.get_size()[1]/2)).center).topleft)
+        
 
         if self.display:
-            self.display_screen.blit(self.screen, (0, 0))
-            pg.draw.lines(self.display_screen, (200, 200, 200), False, self.lnoise, 5)
-
-
+            self.display_screen.blit(rotated_car, rotated_car.get_rect(center=self.carimg.get_rect(topleft=(self.car_x-self.carimg.get_size()[0]/2, self.car_y-self.carimg.get_size()[1]/2)).center).topleft)
             mean_speed = (self.score/5) / (self.time /
                                            1000) if self.time > 0 else 0
 
@@ -205,6 +207,7 @@ class CarEnv(gym.Env):
             self.display_screen.blit(score_surface, (10, 10))
             self.display_screen.blit(time_surface, (10, 50))
             self.display_screen.blit(speed_surface, (10, 90))
+
 
             pg.display.flip()
 
